@@ -7,6 +7,7 @@
 #include <string.h>
 #include <signal.h>
 
+#include "internal.h"
 #include "shell.h"
 #include "builtin.h"
 
@@ -14,6 +15,9 @@
 
 extern char *builtin_str[];
 extern int (*builtin_func[])(char **);
+
+static const struct redirection empty = { 0 };
+struct redirection redirect = { 0 };
 
 void int_handler(int sig) {
 	write(STDOUT_FILENO, "\n", 1);
@@ -36,16 +40,20 @@ int main(int argc, char **argv) {
 		return EXIT_FAILURE;
 	}
 
+	int history_d = prep_history_file();
+
 	do {
 		printf(" $ ");
 		cmd_line = get_cmd();
+		store_cmd(cmd_line, history_d);
 		cmd_list = parse_cmd(cmd_line);
 		status = exec_all(cmd_list);
 
 		free(cmd_line);
 		free(cmd_list);
 	} while ( status );
-	
+
+	close(history_d);
 	return EXIT_SUCCESS;
 }
 
@@ -101,6 +109,18 @@ char **parse_cmd(char *line) {
 int exec_cmd(char **args) {
 	pid_t pid = fork();
 	if ( pid == 0 ) {
+		if ( redirect.type != RE_NONE ) {
+			if ( redirect.type == RE_STDIN ) {
+				dup2(redirect.to_d, redirect.from_d);
+			} else if ( redirect.type == RE_STDOUT ) {
+				dup2(redirect.to_d, redirect.from_d);
+			} else if ( redirect.type == RE_STDERR ) {
+				dup2(redirect.to_d, redirect.from_d);
+			} else {
+				fprintf(stderr, "gsh: invalid redirection\n");
+				_exit(EXIT_FAILURE);
+			}
+		}
 		if ( execvp(args[0], args) == -1 ) {
 			perror("gsh");
 		}
@@ -114,6 +134,7 @@ int exec_cmd(char **args) {
 		exit(EXIT_FAILURE);
 	}
 
+	redirect = empty;
 	return 1;
 }
 
