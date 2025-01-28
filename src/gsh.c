@@ -19,6 +19,10 @@ extern int (*builtin_func[])(char **);
 static const struct redirection empty = { 0 };
 struct redirection redirect = { 0 };
 
+int macro_d = 0;
+Macro *macros;
+int num_macros = 0;
+
 void int_handler(int sig) {
 	write(STDOUT_FILENO, "\n", 1);
 	write(STDOUT_FILENO, " $ ", 3);
@@ -26,6 +30,11 @@ void int_handler(int sig) {
 }
 
 int main(int argc, char **argv) {
+	if ( argc != 1 ) {
+		fprintf(stderr, "gsh: unexpected argument \"%s\"\n", argv[1]);
+		return EXIT_FAILURE;
+	}
+
 	printf("gsh 1.0\nuser %s\n\n", getlogin());
 	char *cmd_line;
 	char **cmd_list;
@@ -41,6 +50,13 @@ int main(int argc, char **argv) {
 	}
 
 	int history_d = prep_history_file();
+	macro_d = prep_macro_file();
+	FILE *macro_f;
+       	if ( (macro_f = fdopen(macro_d, "r+")) == NULL ) {
+		fprintf(stderr, "gsh: could not open macro file for reading\n");
+		return EXIT_FAILURE;
+	}
+	macros = load_macros(macro_f);
 
 	do {
 		printf(" $ ");
@@ -81,7 +97,16 @@ char **parse_cmd(char *line) {
 
 	token = strtok(line, " \t\r\n\a");
 	while ( token != NULL ) {
-		cmd_tokens[pos] = token;
+		if ( (token[0] == '%') && (token[strlen(token) - 1] == '%') ) {
+			char *result = search_macros(token);
+			if ( result == NULL ) {
+				fprintf(stderr, "gsh: invalid macro expression\n");
+				exit(EXIT_FAILURE);
+			}
+			cmd_tokens[pos] = result;
+		} else {
+			cmd_tokens[pos] = token;
+		}
 		pos++;
 
 		if ( pos >= cmd_size ) {
@@ -127,7 +152,14 @@ int exec_cmd(char **args) {
 		_exit(EXIT_FAILURE);
 		// child
 	} else if ( pid > 0 ) {
-		wait(NULL);
+		int wstatus;
+		wait(&wstatus);
+		if ( WIFEXITED(wstatus) ) {
+			int exit = 0;
+			if ( (exit = WEXITSTATUS(wstatus)) != 0 ) {
+				printf("exit status: %d\n", exit);
+			}
+		}
 		// parent
 	} else if ( pid < 0 ) {
 		fprintf(stderr, "gsh: fork error");

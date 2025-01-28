@@ -21,5 +21,7 @@ int gsh_cd(char **args);
 int gsh_help(char **args);
 int gsh_exit(char **args);
 int gsh_redirect(char **args);
+int gsh_macro(char **args);
+int gsh_pipe(char **args);
 
 #endif

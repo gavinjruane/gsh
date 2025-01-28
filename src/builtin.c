@@ -11,21 +11,28 @@
 #include "builtin.h"
 
 #define DEFAULT_CMD_SIZE 64
+#define DEFAULT_SHORTCUT_SIZE 1024
 
 extern struct redirection redirect;
+
+extern int macro_d;
 
 char *builtin_str[] = {
 	"cd",
 	"help",
 	"exit",
-	"redirect"
+	"redirect",
+	"macro",
+	"pipe"
 };
 
 int (*builtin_func[])(char **) = {
 	&gsh_cd,
 	&gsh_help,
 	&gsh_exit,
-	&gsh_redirect
+	&gsh_redirect,
+	&gsh_macro,
+	&gsh_pipe
 };
 
 int get_num_builtins() {
@@ -34,7 +41,8 @@ int get_num_builtins() {
 
 int gsh_cd(char **args) {
 	if ( args[1] == NULL ) {
-		fprintf(stderr, "gsh: expected argument to \"cd\"\n");
+		// chdir(); // go to home dir
+		fprintf(stderr, "gsh: cd: expected argument to \"cd\"\n");
 	} else if ( chdir(args[1]) == -1 ) {
 		perror("gsh");
 		return -1;
@@ -48,18 +56,23 @@ int gsh_help(char **args) {
 }
 
 int gsh_exit(char **args) {
+/*	if ( !args[1] ) {
+		return 0;
+	} else {
+		return atoi(args[1]);
+	} */
 	return 0;
 }
 
 int gsh_redirect(char **args) {
 	// redirect <stdin/stdout/stderr> <file>
 	if ( !args[1] || !args[2] ) {
-		fprintf(stderr, "gsh: expected arguments to \"redirect\"\n");
+		fprintf(stderr, "gsh: redirect: expected arguments to \"redirect\"\n");
 		return 1;
 	} else {
-		int redir_d = open(args[2], O_WRONLY | O_CREAT, 0666);
+		int redir_d = open(args[2], O_WRONLY | O_CREAT, 0666); // might be wrong for stdin
 		if ( redir_d == -1 ) {
-			fprintf(stderr, "gsh: could not open %s for redirection\n", args[2]);
+			fprintf(stderr, "gsh: shortcut: could not open %s for redirection\n", args[2]);
 			return 1;
 		}
 		redirect.to_d = redir_d;
@@ -74,9 +87,35 @@ int gsh_redirect(char **args) {
 			redirect.from_d = STDERR_FILENO;
 			redirect.type = RE_STDERR;
 		} else {
-			fprintf(stderr, "gsh: must specify stdin, stdout, or stderr\n");
+			fprintf(stderr, "gsh: shortcut: must specify stdin, stdout, or stderr\n");
 		}
 	}
 	return 1;
 }
 
+int gsh_macro(char **args) {
+	// macro <absolute path> <shortcut name> -> %<shortcut name>
+	if ( !args[1] || !args[2] ) {	
+		fprintf(stderr, "gsh: macro: expected arguments to \"macro\"\n");
+		fprintf(stderr, "usage: macro <absolute path> <shortcut name>\n");
+		return 1;
+	} else {
+		char macro_keyval[DEFAULT_SHORTCUT_SIZE];
+		sprintf(macro_keyval, "%s:%s\n", args[2], args[1]);
+		if ( write(macro_d, macro_keyval, strlen(macro_keyval) * sizeof(char)) == -1 ) {
+			fprintf(stderr, "gsh: macro: write error\n");
+			return 1;
+		}
+	}
+	return 1;
+}
+
+int gsh_pipe(char **args) {
+	if ( !args[1] ) {
+		fprintf(stderr, "gsh: pipe: expected arguments to \"pipe\"\n");
+		fprintf(stderr, "usage: pipe <program> <args> ...\n");
+	} else {
+		fprintf(stderr, "gsh: pipe: pipes not available.\n");
+	}
+	return 1;
+}
